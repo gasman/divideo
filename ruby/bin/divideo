@@ -1,0 +1,65 @@
+#!/usr/bin/env ruby
+
+require 'divideo'
+require 'optparse'
+
+options = {
+	:border_colour => 0,
+	:use_colour => true,
+	:dither_level => 2,
+	:max_frames => nil,
+	:volume_boost => 1
+}
+OptionParser.new do |opts|
+	opts.banner = "Usage: divideo infile outfile [options]"
+	
+	opts.on("-b", "--border N", Integer, "Set border colour (0-7)") do |b|
+		options[:border_colour] = b
+	end
+
+	opts.on("-c", "--colour", "Perform conversion in colour") do
+		options[:use_colour] = true
+	end
+
+	opts.on("-d", "--dither N", Integer, "Set dither size (1 = none, 2 = 2x2, 4 = 4x4)") do |d|
+		options[:dither_level] = d
+	end
+
+	opts.on("-f", "--frames N", Integer, "Only convert the first N frames") do |frames|
+		options[:max_frames] = frames
+	end
+
+	opts.on("-k", "--contrast N", Float, "Set contrast (5.5 works well)") do |contrast|
+		options[:contrast] = contrast
+	end
+
+	opts.on("-l", "--brightlevel l", Float, "Set midpoint brightness level (0.3 works well)") do |brightlevel|
+		options[:brightlevel] = brightlevel
+	end
+
+	opts.on("-m", "--mono", "Perform conversion in black and white") do
+		options[:use_colour] = false
+	end
+
+	opts.on("-n", "--name NAME", "Specify internal filename for video") do |name|
+		options[:name] = name
+	end
+	
+	opts.on("-v", "--volume N", Float, "Multiply volume level by N") do |vol|
+		options[:volume_boost] = vol
+	end
+
+	opts.on_tail("-h", "--help", "Show this message") do
+		puts opts
+		exit
+	end
+	
+end.parse!
+
+raise "No input file specified" if ARGV[0].nil?
+raise "No output file specified" if ARGV[1].nil?
+video = VideoReader.new(ARGV[0])
+
+output = Divideo::VideoWriter.new(ARGV[1], options)
+output << video
+output.close
