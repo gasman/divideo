@@ -1,40 +1,14 @@
+#include "video_reader.h"
+
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
-#include <stdlib.h>
-#include <stdio.h>
 
-#include "ruby.h"
-
-VALUE rb_eUnsupportedFormat;
-VALUE rb_video_reader;
-
-typedef struct av_frame_list {
-	AVFrame *frame;
-	struct av_frame_list *next;
-} st_av_frame_list;
-
-typedef struct audio_buffer {
-	uint8_t buffer[AVCODEC_MAX_AUDIO_FRAME_SIZE + FF_INPUT_BUFFER_PADDING_SIZE];
-	uint8_t *buffer_end;
-	struct audio_buffer *next;
-} st_audio_buffer;
-
-typedef struct video_reader_data {
-	AVFormatContext *format_context;
-	int video_stream_index;
-	int audio_stream_index;
-	AVCodecContext *audio_codec_context;
-	AVCodecContext *video_codec_context;
-	st_audio_buffer *first_audio_buffer;
-	st_audio_buffer *last_audio_buffer;
-	uint8_t *audio_buffer_position;
-	
-	long long audio_sample_number;
-	AVFrame *incomplete_video_frame;
-	st_av_frame_list *video_frame_list_start;
-	st_av_frame_list *video_frame_list_end;
-} st_video_reader_data;
+static void
+begin_video_frame (st_video_reader_data *vrdata)
+{
+	vrdata->incomplete_video_frame = avcodec_alloc_frame();
+}
 
 static void
 decode_audio_packet(st_video_reader_data *vrdata, AVPacket *packet)
@@ -61,12 +35,6 @@ decode_audio_packet(st_video_reader_data *vrdata, AVPacket *packet)
 	}
 	printf("%d audio buffers in queue\n", buffer_count);
 	*/
-}
-
-static void
-begin_video_frame (st_video_reader_data *vrdata)
-{
-	vrdata->incomplete_video_frame = avcodec_alloc_frame();
 }
 
 static AVFrame *
@@ -146,7 +114,6 @@ continue_video_frame (st_video_reader_data *vrdata, AVPacket *packet)
 	}
 }
 
-
 static int
 get_packet (st_video_reader_data *vrdata)
 {
@@ -188,56 +155,58 @@ next_video_frame (st_video_reader_data *vrdata)
 	}
 }
 
-static void
-video_reader_free (st_video_reader_data *vrdata)
+static st_audio_buffer *
+next_audio_buffer(st_video_reader_data *vrdata)
 {
-	if (vrdata->format_context) {
-		av_close_input_file( vrdata->format_context );
-	}
-}
-
-static VALUE
-video_reader_allocate (VALUE klass)
-{
-	st_video_reader_data *video_reader_data;
-	VALUE rb_instance;
+	st_audio_buffer *buffer;
 	
-	rb_instance = Data_Make_Struct(klass, st_video_reader_data, 0, video_reader_free, video_reader_data);
-	video_reader_data->format_context = NULL;
-	return rb_instance;
+	/* advance/free the last one, if any */
+	buffer = vrdata->first_audio_buffer;
+	if (buffer) {
+		vrdata->first_audio_buffer = buffer->next;
+		if (buffer->next == NULL) vrdata->last_audio_buffer = NULL;
+		free(buffer);
+	}
+	
+	/* check whether we need to read more packets before we have a complete frame */
+	while (vrdata->first_audio_buffer == NULL) {
+		if (get_packet(vrdata) == 0) break;
+	}
+	vrdata->audio_buffer_position = vrdata->first_audio_buffer->buffer;
+	return vrdata->first_audio_buffer;
 }
 
-static VALUE
-video_reader_initialize(VALUE self, VALUE filename)
-{
-	st_video_reader_data *vrdata;
+void video_reader_init() {
+	av_register_all();
+}
+
+void video_reader_init_data(st_video_reader_data *vrdata) {
+	vrdata->format_context = NULL;
+}
+
+int video_reader_open(st_video_reader_data *vrdata, char *filename) {
 	AVFormatContext *format_context;
-	Data_Get_Struct(self, st_video_reader_data, vrdata);
 	unsigned int stream_index;
 	
 	AVCodec *audio_codec, *video_codec;
 	AVCodecContext *audio_codec_context, *video_codec_context;
 	
-	if (Qfalse == rb_funcall(rb_cFile, rb_intern("file?"), 1, filename))
-		rb_raise(rb_eArgError,
-			"Input file not found: %s",
-			StringValuePtr(filename));
-	
-	int error = av_open_input_file(&format_context, StringValuePtr(filename), NULL, 0, NULL);
+	/* TODO: check that file-not-found fails gracefully with an error response */
+	int error = av_open_input_file(&format_context, filename, NULL, 0, NULL);
 	
 	if (error < 0) {
-		rb_raise(rb_eUnsupportedFormat,
-			"ffmpeg failed to open input file %s", 
-			StringValuePtr(filename));
+		fprintf(stderr, "ffmpeg failed to open input file %s\n", filename);
+		return error;
 	}
 	
 	vrdata->format_context = format_context;
 	
 	// Retrieve stream information
-	if(av_find_stream_info(vrdata->format_context)<0)
-		rb_raise(rb_eUnsupportedFormat,
-			"Could not find stream information in file %s", 
-			StringValuePtr(filename));
+	error = av_find_stream_info(vrdata->format_context);
+	if (error < 0) {
+		fprintf(stderr, "Could not find stream information in file %s\n", filename);
+		return error;
+	}
 	
 	/* search for video and audio streams */
 	vrdata->audio_stream_index = -1;
@@ -276,22 +245,15 @@ video_reader_initialize(VALUE self, VALUE filename)
 		}
 	}
 	
-	return self;
+	return 0;
 }
 
-static VALUE
-video_reader_read_ppm(VALUE self) //, VALUE r_width, VALUE r_height)
-{
-	st_video_reader_data *vrdata;
+char *video_reader_read_ppm(st_video_reader_data *vrdata, int *size_out) {
 	AVFrame *frame;
-	Data_Get_Struct(self, st_video_reader_data, vrdata);
 	
 	if ( (frame = next_video_frame(vrdata)) == NULL) {
-		return Qnil;
+		return NULL;
 	} else {
-		//printf("Returning video frame %d\n", frame);
-		//int width = NUM2INT(r_width);
-		//int height = NUM2INT(r_height);
 		int width = vrdata->video_codec_context->width;
 		int height = vrdata->video_codec_context->height;
 		
@@ -306,42 +268,15 @@ video_reader_read_ppm(VALUE self) //, VALUE r_width, VALUE r_height)
 		
 		av_free(frame->data[0]);
 		av_free(frame);
-		return rb_str_new(data_string, size);
+		
+		*size_out = size;
+		return data_string;
 	}
-}
-
-static st_audio_buffer *
-next_audio_buffer(st_video_reader_data *vrdata)
-{
-	st_audio_buffer *buffer;
-	
-	/* advance/free the last one, if any */
-	buffer = vrdata->first_audio_buffer;
-	if (buffer) {
-		vrdata->first_audio_buffer = buffer->next;
-		if (buffer->next == NULL) vrdata->last_audio_buffer = NULL;
-		free(buffer);
-	}
-	
-	/* check whether we need to read more packets before we have a complete frame */
-	while (vrdata->first_audio_buffer == NULL) {
-		if (get_packet(vrdata) == 0) break;
-	}
-	vrdata->audio_buffer_position = vrdata->first_audio_buffer->buffer;
-	return vrdata->first_audio_buffer;
 }
 
 /* compute the average audio level from the previous position to this one (given in tstates) */
-static VALUE
-video_reader_average_audio_level(VALUE self, VALUE rb_tstate)
-{
-	st_video_reader_data *vrdata;
-	Data_Get_Struct(self, st_video_reader_data, vrdata);
-	
-	long long tstate = NUM2LL(rb_tstate);
+long long video_reader_average_audio_level(st_video_reader_data *vrdata, long long tstate) {
 	long long end_sample_number = tstate * vrdata->audio_codec_context->sample_rate / 3546900;
-	
-	//printf("reading up to sample number %lld\n", end_sample_number);
 	
 	int chan;
 	
@@ -350,7 +285,7 @@ video_reader_average_audio_level(VALUE self, VALUE rb_tstate)
 
 	/* ensure we have data; bail out if reading more fails */
 	if (vrdata->audio_buffer_position == NULL || vrdata->audio_buffer_position >= vrdata->first_audio_buffer->buffer_end) {
-		if (next_audio_buffer(vrdata) == NULL) return INT2FIX(0);
+		if (next_audio_buffer(vrdata) == NULL) return 0;
 	}
 	/* read sample */
 	for (chan = 0; chan < vrdata->audio_codec_context->channels; chan++) {
@@ -375,17 +310,11 @@ video_reader_average_audio_level(VALUE self, VALUE rb_tstate)
 		}
 	}
 	
-	return LL2NUM(sample_total / sample_count);
+	return sample_total / sample_count;
 }
 
-void Init_video_reader() {
-	av_register_all();
-	
-	rb_video_reader = rb_define_class("VideoReader", rb_cObject);
-	rb_define_alloc_func (rb_video_reader, video_reader_allocate);
-
-	rb_define_method(rb_video_reader, "initialize", video_reader_initialize, 1);
-	rb_define_method(rb_video_reader, "read_ppm", video_reader_read_ppm, 0);
-	rb_define_method(rb_video_reader, "average_audio_level", video_reader_average_audio_level, 1);
-	rb_eUnsupportedFormat = rb_define_class_under(rb_video_reader, "UnsupportedFormat", rb_eStandardError);
+void video_reader_close_data(st_video_reader_data *vrdata) {
+	if (vrdata->format_context) {
+		av_close_input_file( vrdata->format_context );
+	}
 }
