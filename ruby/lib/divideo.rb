@@ -2,6 +2,7 @@ require 'video_reader'
 require 'rmagick'
 require 'image_to_spectrum'
 require 'delta_compressor'
+require 'divideo_converter'
 
 module Divideo
 	REAL_FRAME_TIME = 141816 # real length of a frame; used for audio timings
@@ -14,45 +15,6 @@ module Divideo
 			img = img.sigmoidal_contrast_channel(contrast || 5.5, Magick::QuantumRange * (brightlevel || 0.30), true)
 		end
 		return img
-	end
-	
-	def self.audio_level_to_ay_level(v, volume_boost = 1)
-		v *= volume_boost
-		if v < 225 then 0
-		elsif v < 560 then 1
-		elsif v < 811 then 2
-		elsif v < 1169 then 3
-		elsif v < 1706 then 4
-		elsif v < 2401 then 5
-		elsif v < 3631 then 6
-		elsif v < 5014 then 7
-		elsif v < 7107 then 8
-		elsif v < 10114 then 9
-		elsif v < 13150 then 10
-		elsif v < 16716 then 11
-		elsif v < 20605 then 12
-		elsif v < 25156 then 13
-		elsif v < 30279 then 14
-		else 15
-		end
-	end
-	
-	def self.encode_deltas(deltas, frame, frame_start_time, video, volume_boost = 1)
-		output = ''
-		deltas.each_with_index do |delta, i|
-			if deltas[i+1]
-				original_audio_level = video.average_audio_level(frame_start_time + deltas[i+1][:time])
-			else
-				original_audio_level = video.average_audio_level(frame_start_time + REAL_FRAME_TIME)
-			end
-	#		original_audio_level = 1
-			audio_level = audio_level_to_ay_level(original_audio_level, volume_boost)
-			data = frame[delta[:offset] ... (delta[:offset] + delta[:length])]
-			packet_data = [0xc000 + delta[:offset], 254-(delta[:length] * 2), 0x80 + audio_level].pack('vCC') + data
-			output << packet_data
-		end
-		
-		return output
 	end
 	
 	class VideoWriter
@@ -88,7 +50,7 @@ module Divideo
 				
 				print "frame #{frame_number}\t"
 				deltas = DeltaCompressor.compute_optimal_deltas(@prev_prev_frame, frame)
-				current_frame_pack_data = Divideo.encode_deltas(deltas, frame, frame_number * REAL_FRAME_TIME, video, @volume_boost)
+				current_frame_pack_data = DivideoConverter.encode_deltas(deltas, frame, frame_number * REAL_FRAME_TIME, video, @volume_boost)
 				
 				current_frame_sector_size = ((current_frame_pack_data.length + 3) / 512.0).ceil
 				
