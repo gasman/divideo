@@ -32,13 +32,12 @@ spec = Gem::Specification.new do |s|
   # Add any extra files to include in the gem (like your README)
   s.files             = %w(Rakefile) + Dir.glob("{bin,lib/**/*,ext/**/*}")
   s.executables       = FileList["bin/**"].map { |f| File.basename(f) }
-  s.extensions        = ['ext/image_to_spectrum/extconf.rb', 'ext/video_reader/extconf.rb', 'ext/delta_compressor/extconf.rb', 'ext/divideo_converter/extconf.rb']
+  s.extensions        = ['ext/image_to_spectrum/extconf.rb', 'ext/video_reader/extconf.rb', 'ext/delta_compressor/extconf.rb', 'ext/divideo_converter/extconf.rb', 'ext/image_preprocessor/extconf.rb']
   s.require_paths     = ["lib","ext"]
 
   # If you want to depend on other gems, add them here, along with any
   # relevant versions
   # s.add_dependency("some_other_gem", "~> 0.1.0")
-  s.add_dependency("rmagick", ">= 2.0.0")
 
   # If your tests use any gems, include them here
   # s.add_development_dependency("mocha") # for example

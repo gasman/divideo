@@ -1,21 +1,11 @@
 require 'video_reader'
-require 'rmagick'
 require 'image_to_spectrum'
 require 'delta_compressor'
 require 'divideo_converter'
+require 'image_preprocessor'
 
 module Divideo
 	REAL_FRAME_TIME = 141816 # real length of a frame; used for audio timings
-	
-	def self.resize_for_spectrum(img, contrast, brightlevel)
-		img.resize_to_fit!(256,192)
-		img.background_color = 'black'
-		img = img.extent(256,192,128 - (img.columns / 2), 96 - (img.rows / 2))
-		if contrast or brightlevel
-			img = img.sigmoidal_contrast_channel(contrast || 5.5, Magick::QuantumRange * (brightlevel || 0.30), true)
-		end
-		return img
-	end
 	
 	class VideoWriter
 		attr_accessor :zx_converter
@@ -44,9 +34,8 @@ module Divideo
 				frame_ppm = video.read_ppm
 				frame_number += 1
 				break if frame_ppm.nil? or (@max_frames and frame_number > @max_frames)
-				img = Magick::Image.from_blob(frame_ppm)[0]
-				img = Divideo.resize_for_spectrum(img, @contrast, @brightlevel)
-				frame = @zx_converter.convert(img.export_pixels_to_str(0, 0, 256, 192, "RGBP"))
+				frame_bitmap = ImagePreprocessor.ppm_to_bitmap(frame_ppm, @contrast, @brightlevel)
+				frame = @zx_converter.convert(frame_bitmap)
 				
 				print "frame #{frame_number}\t"
 				deltas = DeltaCompressor.compute_optimal_deltas(@prev_prev_frame, frame)
