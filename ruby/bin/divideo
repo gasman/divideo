@@ -1,6 +1,11 @@
 #!/usr/bin/env ruby
 
-require 'divideo'
+#require 'divideo'
+require 'video_reader'
+require 'image_to_spectrum'
+require 'delta_compressor'
+require 'divideo_converter'
+require 'image_preprocessor'
 require 'optparse'
 
 options = {
@@ -58,8 +63,13 @@ end.parse!
 
 raise "No input file specified" if ARGV[0].nil?
 raise "No output file specified" if ARGV[1].nil?
-video = VideoReader.new(ARGV[0])
+#video = VideoReader.new(ARGV[0])
 
-output = Divideo::VideoWriter.new(ARGV[1], options)
-output << video
+#output = Divideo::VideoWriter.new(ARGV[1], options)
+#output << video
+#output.close
+
+#C version:
+output = VideoWriter.new(ARGV[1], options)
+output << ARGV[0]
 output.close

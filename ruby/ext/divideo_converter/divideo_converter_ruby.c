@@ -42,9 +42,56 @@ static VALUE encode_deltas_ruby(VALUE self, VALUE deltas_rb, VALUE frame_rb, VAL
 	
 }
 
+static VALUE video_writer_allocate_rb (VALUE klass) {
+	video_writer *vwriter;
+	VALUE rb_instance;
+	
+	rb_instance = Data_Make_Struct(klass, video_writer, 0, video_writer_destroy, vwriter);
+	return rb_instance;
+}
+
+static VALUE video_writer_initialize_rb(VALUE self, VALUE filename_rb, VALUE opts) {
+	video_writer *vwriter;
+	Data_Get_Struct(self, video_writer, vwriter);
+	
+	char *filename = StringValuePtr(filename_rb);
+	
+	char *internal_filename = "test video";
+	int use_colour = 0;
+	int dither_map_size = 2;
+	
+	video_writer_create(vwriter, filename, internal_filename, use_colour, dither_map_size);
+	
+	return self;
+}
+
+static VALUE video_writer_append_rb(VALUE self, VALUE filename_rb) {
+	video_writer *vwriter;
+	Data_Get_Struct(self, video_writer, vwriter);
+	
+	char *filename = StringValuePtr(filename_rb);
+	video_writer_append(vwriter, filename);
+	return self;
+}
+
+static VALUE video_writer_close_rb(VALUE self) {
+	video_writer *vwriter;
+	Data_Get_Struct(self, video_writer, vwriter);
+	
+	video_writer_close(vwriter);
+	return self;
+}
+
 void Init_divideo_converter() {
 	VALUE rbm_divideo_converter;
 	
 	rbm_divideo_converter = rb_define_module("DivideoConverter");
 	rb_define_module_function(rbm_divideo_converter, "encode_deltas", encode_deltas_ruby, 5);
+	
+	video_writer_init();
+	VALUE rbc_video_writer = rb_define_class("VideoWriter", rb_cObject);
+	rb_define_alloc_func (rbc_video_writer, video_writer_allocate_rb);
+	rb_define_method(rbc_video_writer, "initialize", video_writer_initialize_rb, 2);
+	rb_define_method(rbc_video_writer, "<<", video_writer_append_rb, 1);
+	rb_define_method(rbc_video_writer, "close", video_writer_close_rb, 0);
 }
