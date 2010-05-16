@@ -11,7 +11,7 @@ OBJS = \
 
 LIBS = \
 	`${IMAGEMAGICK_ROOT}/bin/MagickCore-config --ldflags` \
-	`${IMAGEMAGICK_ROOT}/bin/MagickCore-config --libs` \
+	-L${IMAGEMAGICK_ROOT}/lib ${IMAGEMAGICK_ROOT}/lib/libMagickCore.a -lm -lgomp -lclparser -framework OpenCL -L/System/Library/Frameworks/OpenCL.framework/Versions/A/Libraries -lm -lpthread \
 	${FFMPEG_ROOT}/lib/libavutil.a \
 	${FFMPEG_ROOT}/lib/libavformat.a \
 	${FFMPEG_ROOT}/lib/libavcodec.a \
