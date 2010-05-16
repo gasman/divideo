@@ -16,6 +16,7 @@ LIBS = \
 	${FFMPEG_ROOT}/lib/libavformat.a \
 	${FFMPEG_ROOT}/lib/libavcodec.a \
 	${FFMPEG_ROOT}/lib/libswscale.a \
+	/usr/local/lib/libargtable2.a \
 
 all: divideo
 
