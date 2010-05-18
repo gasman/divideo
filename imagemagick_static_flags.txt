@@ -6,7 +6,10 @@
 
 ffmpeg:
 
-./configure --prefix=/opt/ffmpeg --disable-shared --disable-encoders --enable-gpl --disable-ffmpeg --disable-ffplay --disable-ffprobe --disable-ffserver
+./configure --prefix=/opt/ffmpeg --disable-shared --disable-encoders --enable-gpl --disable-ffmpeg --disable-ffplay --disable-ffprobe --disable-ffserver --disable-network
+
+(on windows)
+./configure --enable-memalign-hack --disable-shared --disable-encoders --enable-gpl --disable-ffmpeg --disable-ffplay --disable-ffprobe --disable-ffserver --disable-network
 
 install prefix            /opt/ffmpeg
 source path               /Users/matthew/build/ffmpeg-export-2010-04-11
